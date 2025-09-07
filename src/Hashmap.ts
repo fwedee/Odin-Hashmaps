@@ -28,10 +28,9 @@ export class Hashmap{
         const primeNumber = 31;
         for (let i = 0; i < key.length; i++){
             hashCode = primeNumber * hashCode + key.charCodeAt(i);
-            hashCode %= this.capacity;
         }
 
-        return hashCode;
+        return hashCode % this.capacity;
     }
 
     set(key:string, value:string){
@@ -42,11 +41,17 @@ export class Hashmap{
         }
 
        if (this.storage[keyHash]){
-           let bucket :Bucket = this.storage[keyHash];
-           if (bucket.key === key){
-               bucket.value = value;
-           } else {
-               bucket.next = new Bucket(key, value);
+           let currentBucket :Bucket = this.storage[keyHash];
+           while (true){
+               if (currentBucket.key === key){
+                   currentBucket.value = value;
+                   break;
+               }
+               if (!currentBucket.next) {
+                   currentBucket.next = new Bucket(key, value);
+                   break;
+               }
+               currentBucket = currentBucket.next;
            }
        } else {
           this.storage[keyHash] = new Bucket(key, value);
@@ -79,37 +84,36 @@ export class Hashmap{
     }
 
     remove(key:string) :boolean{
-        let keyHash = this.hash(key);
+        const keyHash = this.hash(key);
 
         if (keyHash < 0 || keyHash >= this.storage.length) {
             throw new Error("Trying to access index out of bounds");
         }
 
-        if (this.storage[keyHash]){
-            let item: Bucket = this.storage[keyHash];
-            let prevItem: Bucket;
-            let counter = 0;
+        let bucket = this.storage[keyHash];
 
-            while (item.key != key){
-                if (item.next == null){return false}
-                prevItem = item
-                item = item.next;
-                counter ++;
-            }
-            if (item.next === null && counter == 0){
-               this.storage.splice(counter, 1);
-            } else if (item.next === null){
-                // @ts-ignore
-                prevItem.next = null;
-            }
-            else {
-                // @ts-ignore
-                prevItem.next = item.next;
-            }
-            return true;
-        } else {
+        if (!bucket){
             return false;
         }
+
+        if (bucket.key === key){
+            this.storage[keyHash] = bucket.next;
+            return true;
+        }
+
+        let prev = bucket;
+        let current = bucket.next;
+
+        while (current){
+            if (current.key === key){
+                prev.next = current.next;
+                return true;
+            }
+            prev = current;
+            current = current.next;
+        }
+
+        return false;
     }
 
     length() :number{
@@ -179,7 +183,7 @@ export class Hashmap{
                 entriesArray.push([bucket.key, bucket.value])
                 while(bucket.next){
                     bucket = bucket.next
-                    entriesArray.push(bucket.key, bucket.value)
+                    entriesArray.push([bucket.key, bucket.value])
                 }
             }
         }
@@ -192,13 +196,23 @@ export class Hashmap{
       let transformationFactor = this.capacity * this.loadFactor;
       if (this.length() >= transformationFactor){
             this.capacity *= 2;
+            const oldStorage = this.storage;
             let newStorage = new Array(this.capacity);
 
-            for (let i = 0; i < this.storage.length; i++) {
-                newStorage[i] = this.storage[i];
+            for (let i = 0; i < oldStorage.length; i++) {
+                let bucket: Bucket | null = oldStorage[i];
+            while (bucket) {
+            const newIndex = this.hash(bucket.key) % this.capacity;
+            if (!newStorage[newIndex]) {
+                newStorage[newIndex] = new Bucket(bucket.key, bucket.value);
+            } else {
+                let current = newStorage[newIndex];
+                while (current.next) current = current.next;
+                current.next = new Bucket(bucket.key, bucket.value);
             }
-
-            this.storage = newStorage;
+            bucket = bucket.next;
+            }
+            }
       }
     }
 
